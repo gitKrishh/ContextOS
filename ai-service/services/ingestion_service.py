@@ -9,7 +9,7 @@ from chunking import ChunkingService
 from embeddings import EmbeddingService
 from models.documents import Chunk, Document
 from models.ingestion import IngestionStatus
-from retrieval import FaissIndex
+from retrieval import BM25Index, FaissIndex
 from services.ingestion_registry import IngestionRegistry
 from services.parsers import ParserError, ParserFactory
 from storage import SqliteDocumentStore
@@ -35,6 +35,7 @@ class IngestionService:
         embedding_service: EmbeddingService,
         store: SqliteDocumentStore,
         index: FaissIndex,
+        bm25_index: BM25Index,
         max_retries: int = 2,
     ) -> None:
         self._registry = registry
@@ -43,6 +44,7 @@ class IngestionService:
         self._embedding_service = embedding_service
         self._store = store
         self._index = index
+        self._bm25_index = bm25_index
         self._max_retries = max_retries
         self._queue: asyncio.Queue[IngestionTask] = asyncio.Queue()
         self._worker_task: Optional[asyncio.Task[None]] = None
@@ -50,6 +52,10 @@ class IngestionService:
 
     async def start(self) -> None:
         await self._store.initialize()
+        if self._bm25_index.is_empty():
+            existing_chunks = await self._store.load_chunk_texts(role="primary")
+            if existing_chunks:
+                await asyncio.to_thread(self._bm25_index.build, existing_chunks)
         if self._worker_task is None:
             self._worker_task = asyncio.create_task(self._worker())
 
@@ -163,6 +169,11 @@ class IngestionService:
             await self._store.save_document(document, parsed.text)
             await self._store.save_chunks(
                 [*chunking_result.chunks, *chunking_result.parent_chunks, *chunking_result.child_chunks]
+            )
+
+            await asyncio.to_thread(
+                self._bm25_index.add_documents,
+                [(chunk.id, chunk.content) for chunk in chunking_result.chunks],
             )
 
             index_start = time.perf_counter()

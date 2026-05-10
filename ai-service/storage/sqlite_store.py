@@ -4,10 +4,11 @@ import asyncio
 import json
 import sqlite3
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
-from typing import Iterable, List
+from typing import Iterable, List, Optional, Tuple
 
-from models.documents import Chunk, Document
+from models.documents import Chunk, ChunkMetadata, Document, DocumentMetadata
 
 
 @dataclass(frozen=True)
@@ -28,6 +29,15 @@ class SqliteDocumentStore:
 
     async def save_chunks(self, chunks: Iterable[Chunk]) -> None:
         await asyncio.to_thread(self._save_chunks_sync, list(chunks))
+
+    async def load_chunk_texts(self, role: Optional[str] = None) -> List[Tuple[str, str]]:
+        return await asyncio.to_thread(self._load_chunk_texts_sync, role)
+
+    async def load_chunks(self, chunk_ids: List[str]) -> List[Chunk]:
+        return await asyncio.to_thread(self._load_chunks_sync, chunk_ids)
+
+    async def load_documents(self, document_ids: List[str]) -> List[Document]:
+        return await asyncio.to_thread(self._load_documents_sync, document_ids)
 
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self._config.db_path, check_same_thread=False)
@@ -102,3 +112,64 @@ class SqliteDocumentStore:
                 ],
             )
             conn.commit()
+
+    def _load_chunk_texts_sync(self, role: Optional[str]) -> List[Tuple[str, str]]:
+        with self._connect() as conn:
+            cursor = conn.execute("SELECT id, content, metadata_json FROM chunks")
+            rows = cursor.fetchall()
+
+        results: List[Tuple[str, str]] = []
+        for chunk_id, content, metadata_json in rows:
+            if role:
+                metadata = json.loads(metadata_json)
+                extra = metadata.get("extra", {})
+                if extra.get("role") != role:
+                    continue
+            results.append((chunk_id, content))
+        return results
+
+    def _load_chunks_sync(self, chunk_ids: List[str]) -> List[Chunk]:
+        if not chunk_ids:
+            return []
+        
+        placeholders = ",".join(["?"] * len(chunk_ids))
+        with self._connect() as conn:
+            cursor = conn.execute(
+                f"SELECT id, document_id, content, metadata_json, created_at FROM chunks WHERE id IN ({placeholders})",
+                chunk_ids
+            )
+            rows = cursor.fetchall()
+        
+        chunks = []
+        for row in rows:
+            chunks.append(Chunk(
+                id=row[0],
+                document_id=row[1],
+                content=row[2],
+                metadata=ChunkMetadata.model_validate_json(row[3]),
+                created_at=datetime.fromisoformat(row[4])
+            ))
+        return chunks
+
+    def _load_documents_sync(self, document_ids: List[str]) -> List[Document]:
+        if not document_ids:
+            return []
+        
+        placeholders = ",".join(["?"] * len(document_ids))
+        with self._connect() as conn:
+            cursor = conn.execute(
+                f"SELECT id, title, metadata_json, created_at, updated_at FROM documents WHERE id IN ({placeholders})",
+                document_ids
+            )
+            rows = cursor.fetchall()
+        
+        documents = []
+        for row in rows:
+            documents.append(Document(
+                id=row[0],
+                title=row[1],
+                metadata=DocumentMetadata.model_validate_json(row[2]),
+                created_at=datetime.fromisoformat(row[3]),
+                updated_at=datetime.fromisoformat(row[4])
+            ))
+        return documents

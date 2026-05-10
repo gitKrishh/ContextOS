@@ -5,19 +5,30 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from api import ingestion_router
+from api import ingestion_router, retrieval_router, chat_router, evaluation_router
+from cache.retrieval_cache import RedisRetrievalCache, RetrievalCacheConfig
 from chunking import ChunkingService
 from embeddings import CacheConfig, EmbeddingConfig, EmbeddingService, RedisEmbeddingCache
-from retrieval import FaissIndex, FaissIndexConfig
-from services import IngestionRegistry, IngestionService, ParserFactory
+from evaluation import EvaluationService
+from reranking import RerankerConfig, RerankerService
+from retrieval import BM25Index, BM25IndexConfig, FaissIndex, FaissIndexConfig, HybridRetrievalService
+from services import ChatService, IngestionRegistry, IngestionService, ParserFactory
 from storage import SqliteDocumentStore, SqliteStoreConfig
 from utils.logging import configure_logging
 
 configure_logging()
 
 app = FastAPI(title="ContextOS AI Service")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.middleware("http")
@@ -48,9 +59,12 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 
 app.include_router(ingestion_router)
+app.include_router(retrieval_router)
+app.include_router(chat_router)
+app.include_router(evaluation_router)
 
 
-def _build_services() -> tuple[IngestionService, IngestionRegistry, RedisEmbeddingCache]:
+def _build_services():
     data_dir = Path(os.getenv("CONTEXTOS_DATA_DIR", Path(__file__).resolve().parent / "data"))
     embedding_config = EmbeddingConfig(
         model_name=os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"),
@@ -59,13 +73,13 @@ def _build_services() -> tuple[IngestionService, IngestionRegistry, RedisEmbeddi
         cache_ttl_seconds=int(os.getenv("EMBEDDING_CACHE_TTL", "86400")),
         normalize=True,
     )
-    cache = RedisEmbeddingCache(
+    embedding_cache = RedisEmbeddingCache(
         CacheConfig(
             redis_url=os.getenv("REDIS_URL", "redis://localhost:6379/0"),
             ttl_seconds=embedding_config.cache_ttl_seconds,
         )
     )
-    embedding_service = EmbeddingService(config=embedding_config, cache=cache)
+    embedding_service = EmbeddingService(config=embedding_config, cache=embedding_cache)
     store = SqliteDocumentStore(SqliteStoreConfig(db_path=data_dir / "contextos.db"))
     index = FaissIndex(
         FaissIndexConfig(
@@ -73,6 +87,26 @@ def _build_services() -> tuple[IngestionService, IngestionRegistry, RedisEmbeddi
             metadata_path=data_dir / "faiss_meta.json",
             embedding_dim=embedding_config.embedding_dim,
         )
+    )
+    bm25_index = BM25Index(
+        BM25IndexConfig(index_path=data_dir / "bm25.json")
+    )
+    reranker = RerankerService(
+        RerankerConfig(model_name=os.getenv("RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2"))
+    )
+    retrieval_cache = RedisRetrievalCache(
+        RetrievalCacheConfig(
+            redis_url=os.getenv("REDIS_URL", "redis://localhost:6379/0"),
+            ttl_seconds=int(os.getenv("RETRIEVAL_CACHE_TTL", "3600")),
+        )
+    )
+    retrieval_service = HybridRetrievalService(
+        embedding_service=embedding_service,
+        faiss_index=index,
+        bm25_index=bm25_index,
+        store=store,
+        reranker=reranker,
+        cache=retrieval_cache,
     )
     registry = IngestionRegistry()
     parser_factory = ParserFactory()
@@ -85,17 +119,22 @@ def _build_services() -> tuple[IngestionService, IngestionRegistry, RedisEmbeddi
         embedding_service=embedding_service,
         store=store,
         index=index,
+        bm25_index=bm25_index,
         max_retries=int(os.getenv("INGESTION_MAX_RETRIES", "2")),
     )
-    return ingestion_service, registry, cache
+    chat_service = ChatService()
+    evaluation_service = EvaluationService()
+    return ingestion_service, retrieval_service, registry, embedding_cache, retrieval_cache, chat_service, evaluation_service
 
 
 @app.on_event("startup")
 async def startup() -> None:
-    ingestion_service, registry, cache = _build_services()
+    ingestion_service, retrieval_service, registry, embedding_cache, retrieval_cache, chat_service, evaluation_service = _build_services()
     app.state.ingestion_service = ingestion_service
+    app.state.retrieval_service = retrieval_service
+    app.state.chat_service = chat_service
+    app.state.evaluation_service = evaluation_service
     app.state.ingestion_registry = registry
-    await cache.ping()
     await ingestion_service.start()
 
 

@@ -1,0 +1,26 @@
+services:
+  ai-service:
+    build:
+      context: .
+      dockerfile: infra/docker/ai-service.Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./ai-service/data:/app/data
+    depends_on:
+      - redis
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - ai-service

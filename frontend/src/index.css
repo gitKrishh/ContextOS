@@ -132,3 +132,35 @@ button:disabled {
   background: #7f1d1d;
   color: #fee2e2;
 }
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr;
+  gap: 20px;
+  align-items: start;
+}
+
+.result-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.content {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #e2e8f0;
+}
+
+.score {
+  font-weight: 600;
+  color: #3b82f6;
+  font-size: 13px;
+}
+
+@media (max-width: 768px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Sequence
+from typing import List, Sequence, Tuple
 
 try:
     import faiss
@@ -57,6 +57,21 @@ class FaissIndex:
         if self._config.index_path.exists():
             return faiss.read_index(str(self._config.index_path))
         return faiss.IndexFlatIP(self._config.embedding_dim)
+
+    def search(self, query_embedding: Sequence[float], top_k: int = 5) -> List[Tuple[str, float]]:
+        if not self._id_map or not query_embedding:
+            return []
+
+        query_vector = np.array([query_embedding], dtype="float32")
+        distances, indices = self._index.search(query_vector, top_k)
+
+        results = []
+        for dist, idx in zip(distances[0], indices[0]):
+            if idx < 0 or idx >= len(self._id_map):
+                continue
+            results.append((self._id_map[idx], float(dist)))
+
+        return results
 
     def _load_metadata(self) -> List[str]:
         if self._config.metadata_path.exists():

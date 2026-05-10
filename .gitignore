@@ -1,2 +1,48 @@
 # Agent metadata
 .agent/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+.venv
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Node
+node_modules/
+dist/
+dist-ssr
+*.local
+.npm
+.eslintcache
+
+# Project Data
+ai-service/data/*.db
+ai-service/data/*.index
+ai-service/data/*.json
+ai-service/data/faiss_meta.json
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
