@@ -13,3 +13,4 @@ python-docx
 openai
 ragas
 deepeval
+python-dotenv

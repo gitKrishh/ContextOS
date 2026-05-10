@@ -13,9 +13,9 @@ from utils.logging import logger as get_logger
 
 @dataclass(frozen=True)
 class ChatConfig:
-    model: str = os.getenv("CHAT_MODEL", "minimaxai/minimax-m2.7")
-    api_key: Optional[str] = os.getenv("CHAT_API_KEY", "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")
-    base_url: Optional[str] = os.getenv("CHAT_BASE_URL", "https://integrate.api.nvidia.com/v1")
+    model: str = os.getenv("CHAT_MODEL", "gpt-4o-mini")
+    api_key: Optional[str] = os.getenv("CHAT_API_KEY")
+    base_url: Optional[str] = os.getenv("CHAT_BASE_URL")
     temperature: float = 1.0
     max_tokens: int = 8192
     system_prompt: str = (
@@ -54,6 +54,7 @@ class ChatService:
         ]
 
         try:
+            print(f"DEBUG: Calling NVIDIA LLM {self._config.model}...")
             stream = await self._client.chat.completions.create(
                 model=self._config.model,
                 messages=messages,
@@ -63,8 +64,11 @@ class ChatService:
             )
 
             async for chunk in stream:
+                if not getattr(chunk, "choices", None):
+                    continue
                 content = chunk.choices[0].delta.content
                 if content:
+                    print(f"DEBUG: Token received: {content}")
                     yield content
         except Exception as e:
             self._logger.error(f"Error during chat completion: {e}")

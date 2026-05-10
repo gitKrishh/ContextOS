@@ -35,6 +35,7 @@ async def chat_completions(
     retrieval_service: HybridRetrievalService = Depends(get_retrieval_service),
     chat_service: ChatService = Depends(get_chat_service),
 ):
+    print(f"DEBUG: Chat request received for query: {chat_req.query}")
     # 1. Retrieve relevant chunks
     results = await retrieval_service.search(
         query=chat_req.query,
@@ -55,7 +56,7 @@ async def chat_completions(
                 {
                     "id": chunk.id,
                     "document_id": chunk.document_id,
-                    "metadata": chunk.metadata,
+                    "metadata": chunk.metadata.model_dump(),
                 }
                 for chunk in chunks
             ]

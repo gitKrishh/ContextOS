@@ -61,6 +61,8 @@ class HybridRetrievalService:
         query_embedding = query_embeddings[0]
 
         # 2. Parallel Dense and Sparse retrieval
+        import time
+        start_retrieval = time.perf_counter()
         # If reranking, we fetch more results to rerank
         initial_top_k = top_k * 5 if use_reranker else top_k * 2
         
@@ -68,6 +70,7 @@ class HybridRetrievalService:
         sparse_results_task = asyncio.to_thread(self._bm25_index.search, query, top_k=initial_top_k)
 
         dense_results, sparse_results = await asyncio.gather(dense_results_task, sparse_results_task)
+        print(f"DEBUG: Parallel retrieval took {(time.perf_counter() - start_retrieval)*1000:.2f}ms")
 
         # 3. Reciprocal Rank Fusion (RRF)
         rrf_scores: Dict[str, float] = {}
@@ -97,11 +100,13 @@ class HybridRetrievalService:
             for chunk_id, score in sorted_results
             if chunk_id in chunk_map
         ]
-
         # 6. Reranking (optional)
         if use_reranker and self._reranker is not None:
+            start_rerank = time.perf_counter()
+            print(f"DEBUG: Reranking {len(results_to_process)} chunks...")
             chunks_to_rerank = [c for c, s in results_to_process]
             results = await self._reranker.rerank(query, chunks_to_rerank, top_n=top_k)
+            print(f"DEBUG: Reranking took {(time.perf_counter() - start_rerank)*1000:.2f}ms")
         else:
             results = results_to_process[:top_k]
 
