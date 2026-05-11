@@ -134,16 +134,45 @@ async def get_status(request: Request, document_id: str) -> StatusResponse:
 
 @router.get("/documents", response_model=ListResponse)
 async def list_documents(request: Request) -> ListResponse:
-    documents = _get_registry(request).list_documents()
-    return ListResponse(request_id=_get_request_id(request), documents=documents)
+    registry = _get_registry(request)
+    service = _get_service(request)
+    
+    # 1. Get in-memory documents (active or recent)
+    registry_docs = registry.list_documents()
+    registry_ids = {d.document.id for d in registry_docs}
+    
+    # 2. Get all documents from permanent store
+    # We'll need a new method in PostgresStore to list all document IDs
+    db_docs = await service._store.load_all_documents()
+    
+    # 3. Merge them
+    results = list(registry_docs)
+    from models.ingestion import IngestionJob, IngestionStatus
+    from datetime import datetime
+    
+    for doc in db_docs:
+        if doc.id not in registry_ids:
+            # Create a synthetic "completed" job status for historical docs
+            job = IngestionJob(
+                id=f"job-{doc.id}",
+                document_id=doc.id,
+                status=IngestionStatus.completed,
+                attempts=1,
+                max_attempts=1,
+                created_at=doc.created_at,
+                updated_at=doc.updated_at
+            )
+            results.append(DocumentStatus(document=doc, job=job))
+            
+    return ListResponse(request_id=_get_request_id(request), documents=results)
 
 
 @router.delete("/documents/{document_id}", response_model=DeleteResponse)
 async def delete_document(request: Request, document_id: str) -> DeleteResponse:
-    deleted = _get_registry(request).delete_document(document_id)
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Document not found")
+    # 1. Remove from in-memory registry (if present)
+    _get_registry(request).delete_document(document_id)
         
+    # 2. Delete from permanent store (this is the source of truth)
     service = _get_service(request)
     await service._store.delete_document(document_id)
     

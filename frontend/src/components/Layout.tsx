@@ -11,7 +11,9 @@ import {
   Box,
   Upload,
   MessageSquarePlus,
-  MessageSquare
+  MessageSquare,
+  Trash2,
+  Edit2
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -22,6 +24,8 @@ interface LayoutProps {
   chatSessions: { id: string; title: string; timestamp: number }[];
   activeSessionId: string | null;
   onSessionSelect: (id: string) => void;
+  onDeleteSession: (id: string) => void;
+  onRenameSession: (id: string, newTitle: string) => void;
   onNewSession: () => void;
   onOpenSettings: () => void;
   onOpenSecurity: () => void;
@@ -35,6 +39,8 @@ export const Sidebar = ({
   chatSessions,
   activeSessionId,
   onSessionSelect,
+  onDeleteSession,
+  onRenameSession,
   onNewSession,
   onOpenSettings,
   onOpenSecurity
@@ -84,6 +90,25 @@ export const Sidebar = ({
 
       {/* Multi-Chat Threads */}
       <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <div style={{ position: 'relative', margin: '0 12px 16px' }}>
+          <Search size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+          <input 
+            type="text" 
+            placeholder="Search chats..."
+            className="retriq-input"
+            style={{ padding: '8px 12px 8px 36px', fontSize: '12px', width: '100%', borderRadius: '6px', height: '32px' }}
+            onChange={(e) => {
+              // We'll pass this logic up or handle it here if we filter locally
+              const term = e.target.value.toLowerCase();
+              const items = document.querySelectorAll('.session-item-wrapper');
+              items.forEach((item: any) => {
+                const text = item.textContent.toLowerCase();
+                item.style.display = text.includes(term) ? 'flex' : 'none';
+              });
+            }}
+          />
+        </div>
+
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 12px', marginBottom: '8px' }}>
           <p className="text-xs-bold" style={{ color: 'var(--text-muted)' }}>Recent Chats</p>
           <button onClick={onNewSession} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }} title="New Chat">
@@ -91,15 +116,43 @@ export const Sidebar = ({
           </button>
         </div>
         {chatSessions.map(session => (
-          <button
-            key={session.id}
-            onClick={() => onSessionSelect(session.id)}
-            className={`nav-link ${activeSessionId === session.id && activeTab === 'playground' ? 'active' : ''}`}
-            style={{ padding: '8px 12px', fontSize: '12px' }}
+          <div 
+            key={session.id} 
+            className="session-item-wrapper"
+            style={{ position: 'relative', display: 'flex', alignItems: 'center' }}
           >
-            <MessageSquare size={14} style={{ flexShrink: 0 }} />
-            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{session.title}</span>
-          </button>
+            <button
+              onClick={() => onSessionSelect(session.id)}
+              className={`nav-link ${activeSessionId === session.id && activeTab === 'playground' ? 'active' : ''}`}
+              style={{ padding: '8px 12px', fontSize: '12px', flex: 1, paddingRight: '32px' }}
+            >
+              <MessageSquare size={14} style={{ flexShrink: 0 }} />
+              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{session.title}</span>
+            </button>
+            <div style={{ position: 'absolute', right: '4px', display: 'flex', alignItems: 'center', gap: '0', opacity: activeSessionId === session.id ? 1 : 0, transition: 'opacity 0.2s' }}>
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRenameSession(session.id, session.title);
+                }}
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}
+                title="Rename Chat"
+              >
+                <Edit2 size={12} />
+              </button>
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeleteSession(session.id);
+                }}
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}
+                className="session-delete-btn"
+                title="Delete Chat"
+              >
+                <Trash2 size={12} />
+              </button>
+            </div>
+          </div>
         ))}
         {chatSessions.length === 0 && (
           <p style={{ fontSize: '12px', color: 'var(--text-muted)', padding: '0 12px' }}>No recent chats.</p>
@@ -168,16 +221,6 @@ export const Header = ({ title }: { title: string }) => {
           {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
           {theme === 'light' ? 'Dark' : 'Light'}
         </button>
-        
-        <div style={{ position: 'relative' }}>
-          <Search size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-          <input 
-            type="text" 
-            placeholder="Search..."
-            className="retriq-input"
-            style={{ padding: '8px 12px 8px 36px', fontSize: '13px', width: '240px', borderRadius: '6px' }}
-          />
-        </div>
       </div>
     </header>
   );

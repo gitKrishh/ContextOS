@@ -17,17 +17,6 @@ from utils.observability import telemetry
 router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
 logger = logging.getLogger("contextos.api.chat")
 
-class ChatRequest(BaseModel):
-    query: str
-    session_id: str = "default"
-    top_k: int = 5
-    use_reranker: bool = True
-    dense_weight: float = 1.0
-    sparse_weight: float = 1.0
-
-class SessionCreateRequest(BaseModel):
-    title: str = "New Conversation"
-
 def get_retrieval_service(request: Request) -> HybridRetrievalService:
     return request.app.state.retrieval_service
 
@@ -39,6 +28,30 @@ def get_eval_service(request: Request) -> EvaluationService:
 
 def get_chat_store(request: Request) -> PostgresStore:
     return request.app.state.chat_store
+
+class ChatRequest(BaseModel):
+    query: str
+    session_id: str = "default"
+    top_k: int = 5
+    use_reranker: bool = True
+    dense_weight: float = 1.0
+    sparse_weight: float = 1.0
+
+class SessionCreateRequest(BaseModel):
+    title: str = "New Conversation"
+
+class SessionRenameRequest(BaseModel):
+    title: str
+
+@router.patch("/sessions/{session_id}")
+async def rename_session(
+    session_id: str,
+    req: SessionRenameRequest,
+    store: PostgresStore = Depends(get_chat_store)
+):
+    await store.update_session_title(session_id, req.title)
+    return {"success": True}
+
 
 @router.post("/sessions")
 async def create_session(

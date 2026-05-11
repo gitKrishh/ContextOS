@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import Dict, List, Optional, Tuple
 
 from cache.retrieval_cache import RedisRetrievalCache, build_retrieval_cache_key
@@ -54,21 +55,21 @@ class HybridRetrievalService:
                     if res["chunk_id"] in chunk_map
                 ]
 
-        # 1. Generate query embedding
-        query_embeddings = await self._embedding_service.embed_texts([query], input_type="query")
-        query_embedding = query_embeddings[0]
-
-        # 2. Parallel Dense and Sparse retrieval
-        import time
         start_retrieval = time.perf_counter()
-        # If reranking, we fetch more results to rerank
+        # 1. Start Sparse retrieval immediately (it doesn't need the embedding)
         initial_top_k = top_k * 5 if use_reranker else top_k * 2
-        
-        dense_results_task = self._store.search_dense(query_embedding, top_k=initial_top_k)
         sparse_results_task = asyncio.to_thread(self._bm25_index.search, query, top_k=initial_top_k)
 
-        dense_results, sparse_results = await asyncio.gather(dense_results_task, sparse_results_task)
-        print(f"DEBUG: Parallel retrieval took {(time.perf_counter() - start_retrieval)*1000:.2f}ms")
+        # 2. Generate query embedding (API call)
+        embed_start = time.perf_counter()
+        query_embeddings = await self._embedding_service.embed_texts([query], input_type="query")
+        query_embedding = query_embeddings[0]
+        print(f"DEBUG: Embedding took {(time.perf_counter() - embed_start)*1000:.2f}ms")
+
+        # 3. Dense retrieval
+        dense_results = await self._store.search_dense(query_embedding, top_k=initial_top_k)
+        sparse_results = await sparse_results_task
+        print(f"DEBUG: Parallel retrieval finished (Dense + Sparse)")
 
         # 3. Reciprocal Rank Fusion (RRF)
         rrf_scores: Dict[str, float] = {}

@@ -76,7 +76,7 @@ class PostgresStore:
             stmt = select(
                 ChunkModel.id,
                 (1 - ChunkModel.embedding.cosine_distance(query_embedding)).label("similarity")
-            ).order_by(text("similarity DESC")).limit(top_k)
+            ).where(ChunkModel.embedding.is_not(None)).order_by(text("similarity DESC")).limit(top_k)
             
             result = await session.execute(stmt)
             return [(row[0], float(row[1])) for row in result.all()]
@@ -225,6 +225,22 @@ class PostgresStore:
         
         async with self.async_session() as session:
             result = await session.execute(select(DocumentModel).where(DocumentModel.id.in_(document_ids)))
+            db_docs = result.scalars().all()
+            
+            documents = []
+            for d in db_docs:
+                documents.append(Document(
+                    id=d.id,
+                    title=d.title,
+                    metadata=DocumentMetadata.model_validate_json(d.metadata_json),
+                    created_at=d.created_at,
+                    updated_at=d.updated_at
+                ))
+            return documents
+
+    async def load_all_documents(self) -> List[Document]:
+        async with self.async_session() as session:
+            result = await session.execute(select(DocumentModel).order_by(DocumentModel.created_at.desc()))
             db_docs = result.scalars().all()
             
             documents = []
