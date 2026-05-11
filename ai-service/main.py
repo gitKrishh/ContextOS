@@ -17,9 +17,9 @@ from chunking import ChunkingService
 from embeddings import CacheConfig, EmbeddingConfig, EmbeddingService, RedisEmbeddingCache
 from evaluation import EvaluationService
 from reranking import RerankerConfig, RerankerService
-from retrieval import BM25Index, BM25IndexConfig, FaissIndex, FaissIndexConfig, HybridRetrievalService
+from retrieval import BM25Index, BM25IndexConfig, HybridRetrievalService
 from services import ChatService, IngestionRegistry, IngestionService, ParserFactory
-from storage import SqliteDocumentStore, SqliteStoreConfig
+from storage.postgres_store import PostgresStore
 from utils.logging import configure_logging
 
 configure_logging()
@@ -68,7 +68,7 @@ app.include_router(evaluation_router)
 app.include_router(observability_router)
 
 
-def _build_services():
+def _build_services(store: PostgresStore):
     data_dir = Path(os.getenv("CONTEXTOS_DATA_DIR", Path(__file__).resolve().parent / "data"))
     embedding_config = EmbeddingConfig(
         model_name=os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"),
@@ -84,14 +84,6 @@ def _build_services():
         )
     )
     embedding_service = EmbeddingService(config=embedding_config, cache=embedding_cache)
-    store = SqliteDocumentStore(SqliteStoreConfig(db_path=data_dir / "contextos.db"))
-    index = FaissIndex(
-        FaissIndexConfig(
-            index_path=data_dir / "faiss.index",
-            metadata_path=data_dir / "faiss_meta.json",
-            embedding_dim=embedding_config.embedding_dim,
-        )
-    )
     bm25_index = BM25Index(
         BM25IndexConfig(index_path=data_dir / "bm25.json")
     )
@@ -106,7 +98,6 @@ def _build_services():
     )
     retrieval_service = HybridRetrievalService(
         embedding_service=embedding_service,
-        faiss_index=index,
         bm25_index=bm25_index,
         store=store,
         reranker=reranker,
@@ -122,7 +113,6 @@ def _build_services():
         chunking_service=chunking_service,
         embedding_service=embedding_service,
         store=store,
-        index=index,
         bm25_index=bm25_index,
         max_retries=int(os.getenv("INGESTION_MAX_RETRIES", "2")),
     )
@@ -133,14 +123,24 @@ def _build_services():
 
 @app.on_event("startup")
 async def startup() -> None:
-    ingestion_service, retrieval_service, registry, embedding_cache, retrieval_cache, chat_service, evaluation_service = _build_services()
+    db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        raise RuntimeError("DATABASE_URL must be set to use PostgreSQL")
+        
+    store = PostgresStore(db_url)
+    await store.initialize()
+    
+    ingestion_service, retrieval_service, registry, embedding_cache, retrieval_cache, chat_service, evaluation_service = _build_services(store)
+    
     app.state.ingestion_service = ingestion_service
     app.state.retrieval_service = retrieval_service
     app.state.chat_service = chat_service
     app.state.evaluation_service = evaluation_service
     app.state.ingestion_registry = registry
+    app.state.document_store = store
+    app.state.chat_store = store
+    
     await ingestion_service.start()
-
 
 @app.on_event("shutdown")
 async def shutdown() -> None:

@@ -48,4 +48,5 @@ class Chunk(BaseModel):
     document_id: str
     content: str
     metadata: ChunkMetadata
+    embedding: Optional[List[float]] = None
     created_at: datetime

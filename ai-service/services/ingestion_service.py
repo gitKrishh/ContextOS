@@ -12,7 +12,7 @@ from models.ingestion import IngestionStatus
 from retrieval import BM25Index, FaissIndex
 from services.ingestion_registry import IngestionRegistry
 from services.parsers import ParserError, ParserFactory
-from storage import SqliteDocumentStore
+from storage.postgres_store import PostgresStore
 from utils.logging import info as log_info
 from utils.logging import logger as get_logger
 
@@ -33,7 +33,7 @@ class IngestionService:
         parser_factory: ParserFactory,
         chunking_service: ChunkingService,
         embedding_service: EmbeddingService,
-        store: SqliteDocumentStore,
+        store: PostgresStore,
         index: FaissIndex,
         bm25_index: BM25Index,
         max_retries: int = 2,
@@ -166,6 +166,10 @@ class IngestionService:
             )
             embed_duration = time.perf_counter() - embed_start
 
+            # Map embeddings back to primary chunks
+            for i, chunk in enumerate(chunking_result.chunks):
+                chunk.embedding = embeddings[i]
+
             await self._store.save_document(document, parsed.text)
             await self._store.save_chunks(
                 [*chunking_result.chunks, *chunking_result.parent_chunks, *chunking_result.child_chunks]
@@ -176,14 +180,6 @@ class IngestionService:
                 [(chunk.id, chunk.content) for chunk in chunking_result.chunks],
             )
 
-            index_start = time.perf_counter()
-            await asyncio.to_thread(
-                self._index.add_embeddings,
-                embeddings,
-                [chunk.id for chunk in chunking_result.chunks],
-            )
-            index_duration = time.perf_counter() - index_start
-
             self._registry.update_job_status(task.document_id, IngestionStatus.completed)
             log_info(
                 self._logger,
@@ -192,7 +188,6 @@ class IngestionService:
                 parse_ms=round(parse_duration * 1000, 2),
                 chunk_ms=round(chunk_duration * 1000, 2),
                 embed_ms=round(embed_duration * 1000, 2),
-                index_ms=round(index_duration * 1000, 2),
             )
         except ParserError as exc:
             await self._handle_failure(task, str(exc), retry=False)

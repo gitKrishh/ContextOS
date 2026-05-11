@@ -2,14 +2,16 @@ import json
 import time
 import logging
 from typing import List, Optional
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from retrieval.retrieval_service import HybridRetrievalService
 from services.chat_service import ChatService
 from evaluation import EvaluationService
+from storage.postgres_store import PostgresStore
 from utils.observability import telemetry
 
 router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
@@ -17,10 +19,14 @@ logger = logging.getLogger("contextos.api.chat")
 
 class ChatRequest(BaseModel):
     query: str
+    session_id: str = "default"
     top_k: int = 5
     use_reranker: bool = True
     dense_weight: float = 1.0
     sparse_weight: float = 1.0
+
+class SessionCreateRequest(BaseModel):
+    title: str = "New Conversation"
 
 def get_retrieval_service(request: Request) -> HybridRetrievalService:
     return request.app.state.retrieval_service
@@ -31,14 +37,69 @@ def get_chat_service(request: Request) -> ChatService:
 def get_eval_service(request: Request) -> EvaluationService:
     return request.app.state.evaluation_service
 
+def get_chat_store(request: Request) -> PostgresStore:
+    return request.app.state.chat_store
+
+@router.post("/sessions")
+async def create_session(
+    req: SessionCreateRequest,
+    store: PostgresStore = Depends(get_chat_store)
+):
+    session_id = str(uuid4())
+    await store.create_session(session_id, req.title)
+    return {"success": True, "session_id": session_id, "title": req.title}
+
+@router.get("/sessions")
+async def list_sessions(store: PostgresStore = Depends(get_chat_store)):
+    sessions = await store.get_sessions()
+    return {"success": True, "sessions": sessions}
+
+@router.get("/sessions/{session_id}/messages")
+async def get_session_messages(
+    session_id: str, 
+    store: PostgresStore = Depends(get_chat_store)
+):
+    messages = await store.get_messages(session_id)
+    return {"success": True, "messages": messages}
+
+@router.delete("/sessions/{session_id}")
+async def delete_session(
+    session_id: str, 
+    store: PostgresStore = Depends(get_chat_store)
+):
+    await store.delete_session(session_id)
+    return {"success": True}
+
 @router.post("/completions")
 async def chat_completions(
     chat_req: ChatRequest,
     retrieval_service: HybridRetrievalService = Depends(get_retrieval_service),
     chat_service: ChatService = Depends(get_chat_service),
     eval_service: EvaluationService = Depends(get_eval_service),
+    store: PostgresStore = Depends(get_chat_store)
 ):
     start_total = time.perf_counter()
+    
+    # Ensure session exists (create lazily if not)
+    sessions = await store.get_sessions()
+    if not any(s["id"] == chat_req.session_id for s in sessions):
+        title = chat_req.query[:25] + "..." if len(chat_req.query) > 25 else chat_req.query
+        await store.create_session(chat_req.session_id, title)
+    else:
+        # If it's the very first message of the session, update the title to the query
+        messages = await store.get_messages(chat_req.session_id)
+        if not messages:
+            title = chat_req.query[:25] + "..." if len(chat_req.query) > 25 else chat_req.query
+            await store.update_session_title(chat_req.session_id, title)
+
+    # Save User Message to DB
+    user_msg_id = str(uuid4())
+    await store.add_message(
+        session_id=chat_req.session_id,
+        message_id=user_msg_id,
+        role="user",
+        content=chat_req.query
+    )
     
     # 1. Retrieval
     search_start = time.perf_counter()
@@ -53,20 +114,22 @@ async def chat_completions(
     chunks = [chunk for chunk, score in results]
 
     async def event_generator():
+        citations_data = [
+            {
+                "id": chunk.id,
+                "document_id": chunk.document_id,
+                "content": chunk.content,
+                "metadata": chunk.metadata.model_dump() if hasattr(chunk.metadata, "model_dump") else chunk.metadata,
+                "score": float(next((score for c, score in results if c.id == chunk.id), 0.8))
+            }
+            for chunk in chunks
+        ]
+
         # A. Identity Event (Send Model Name & Citations First)
         identity_payload = {
             "type": "identity",
             "model": chat_service.model_name,
-            "citations": [
-                {
-                    "id": chunk.id,
-                    "document_id": chunk.document_id,
-                    "content": chunk.content,
-                    "metadata": chunk.metadata.model_dump() if hasattr(chunk.metadata, "model_dump") else chunk.metadata,
-                    "score": float(next((score for c, score in results if c.id == chunk.id), 0.8))
-                }
-                for chunk in chunks
-            ]
+            "citations": citations_data
         }
         yield f"data: {json.dumps(identity_payload)}\n\n"
 
@@ -81,6 +144,16 @@ async def chat_completions(
         except Exception as e:
             logger.error(f"Streaming error: {e}")
             yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
+
+        # Save AI Message to DB
+        ai_msg_id = str(uuid4())
+        await store.add_message(
+            session_id=chat_req.session_id,
+            message_id=ai_msg_id,
+            role="ai",
+            content=full_response,
+            citations=citations_data
+        )
 
         # C. Evaluation & Metrics
         llm_latency = (time.perf_counter() - llm_start) * 1000

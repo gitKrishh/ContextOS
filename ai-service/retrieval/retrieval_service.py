@@ -9,7 +9,7 @@ from models.documents import Chunk
 from reranking import RerankerService
 from retrieval.bm25_index import BM25Index
 from retrieval.faiss_index import FaissIndex
-from storage.sqlite_store import SqliteDocumentStore
+from storage.postgres_store import PostgresStore
 from utils.observability import telemetry
 
 
@@ -20,7 +20,7 @@ class HybridRetrievalService:
         embedding_service: EmbeddingService,
         faiss_index: FaissIndex,
         bm25_index: BM25Index,
-        store: SqliteDocumentStore,
+        store: PostgresStore,
         reranker: Optional[RerankerService] = None,
         cache: Optional[RedisRetrievalCache] = None,
         rrf_k: int = 60,
@@ -67,7 +67,7 @@ class HybridRetrievalService:
         # If reranking, we fetch more results to rerank
         initial_top_k = top_k * 5 if use_reranker else top_k * 2
         
-        dense_results_task = asyncio.to_thread(self._faiss_index.search, query_embedding, top_k=initial_top_k)
+        dense_results_task = self._store.search_dense(query_embedding, top_k=initial_top_k)
         sparse_results_task = asyncio.to_thread(self._bm25_index.search, query, top_k=initial_top_k)
 
         dense_results, sparse_results = await asyncio.gather(dense_results_task, sparse_results_task)

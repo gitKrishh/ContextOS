@@ -22,8 +22,7 @@ interface Message {
 interface ChatSession {
   id: string;
   title: string;
-  timestamp: number;
-  messages: Message[];
+  created_at: string;
 }
 
 export default function App() {
@@ -44,16 +43,10 @@ export default function App() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState("");
   
-  // Multi-Chat State
-  const [chatSessions, setChatSessions] = useState<ChatSession[]>(() => {
-    const saved = localStorage.getItem('contextos_chat_sessions');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      return parsed.length > 0 ? parsed : [{ id: Date.now().toString(), title: 'New Conversation', timestamp: Date.now(), messages: [] }];
-    }
-    return [{ id: Date.now().toString(), title: 'New Conversation', timestamp: Date.now(), messages: [] }];
-  });
-  const [activeSessionId, setActiveSessionId] = useState<string>(() => chatSessions[0]?.id || Date.now().toString());
+  // Multi-Chat State (Backend Driven)
+  const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [chatHistory, setChatHistory] = useState<Message[]>([]);
   const [chatQuery, setChatQuery] = useState("");
   
   const [retrievedChunks, setRetrievedChunks] = useState<any[]>([]);
@@ -66,10 +59,6 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
-  
-  // Computed active session
-  const activeSession = chatSessions.find(s => s.id === activeSessionId) || chatSessions[0];
-  const chatHistory = activeSession?.messages || [];
 
   useEffect(() => {
     if (activeTab !== 'hero') {
@@ -78,35 +67,19 @@ export default function App() {
   }, [activeTab]);
 
   useEffect(() => {
-    localStorage.setItem('contextos_chat_sessions', JSON.stringify(chatSessions));
-  }, [chatSessions]);
-
-  useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [streamingResponse, chatHistory]);
 
-  const handleNewSession = () => {
-    const newSession: ChatSession = {
-      id: Date.now().toString(),
-      title: 'New Conversation',
-      timestamp: Date.now(),
-      messages: []
-    };
-    setChatSessions(prev => [newSession, ...prev]);
-    setActiveSessionId(newSession.id);
-    setActiveTab('playground');
-    setRetrievedChunks([]);
-    setLastMetrics(null);
-  };
-
+  // --- Backend API Syncing ---
   const fetchAllData = async () => {
     if (activeTab === 'hero') return;
     try {
       setIsLoadingDocs(true);
-      const [mRes, oRes, dRes] = await Promise.all([
+      const [mRes, oRes, dRes, sRes] = await Promise.all([
         fetch(`${DEFAULT_API_BASE}/api/v1/evaluation/stats`),
         fetch(`${DEFAULT_API_BASE}/api/v1/observability/logs`),
-        fetch(`${DEFAULT_API_BASE}/api/v1/ingestion/documents`)
+        fetch(`${DEFAULT_API_BASE}/api/v1/ingestion/documents`),
+        fetch(`${DEFAULT_API_BASE}/api/v1/chat/sessions`)
       ]);
       
       const mData = await mRes.json();
@@ -117,6 +90,16 @@ export default function App() {
 
       const dData = await dRes.json();
       setDocuments(dData.documents || []);
+
+      const sData = await sRes.json();
+      if (sData.success) {
+        setChatSessions(sData.sessions);
+        if (sData.sessions.length > 0 && !activeSessionId) {
+          handleSessionSelect(sData.sessions[0].id);
+        } else if (sData.sessions.length === 0) {
+          handleNewSession();
+        }
+      }
     } catch (e) {
       console.error("Data sync failed:", e);
     } finally {
@@ -129,6 +112,56 @@ export default function App() {
     const interval = setInterval(fetchAllData, 10000);
     return () => clearInterval(interval);
   }, [activeTab]);
+
+  // Fetch messages when active session changes
+  const handleSessionSelect = async (id: string) => {
+    setActiveSessionId(id);
+    setActiveTab('playground');
+    try {
+      const res = await fetch(`${DEFAULT_API_BASE}/api/v1/chat/sessions/${id}/messages`);
+      const data = await res.json();
+      if (data.success) {
+        setChatHistory(data.messages);
+      }
+    } catch (e) {
+      console.error("Failed to fetch session messages");
+    }
+  };
+
+  const handleNewSession = async () => {
+    try {
+      const res = await fetch(`${DEFAULT_API_BASE}/api/v1/chat/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: "New Conversation" })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setChatSessions(prev => [{ id: data.session_id, title: data.title, created_at: new Date().toISOString() }, ...prev]);
+        setActiveSessionId(data.session_id);
+        setChatHistory([]);
+        setActiveTab('playground');
+        setRetrievedChunks([]);
+        setLastMetrics(null);
+      }
+    } catch (e) {
+      setError("Failed to create new session in database");
+    }
+  };
+
+  // Clear Chats from Database
+  const clearAllChats = async () => {
+    try {
+      for (const session of chatSessions) {
+        await fetch(`${DEFAULT_API_BASE}/api/v1/chat/sessions/${session.id}`, { method: 'DELETE' });
+      }
+      setChatSessions([]);
+      handleNewSession();
+      setShowSettingsModal(false);
+    } catch (e) {
+      setError("Failed to clear chats from database");
+    }
+  };
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -179,22 +212,18 @@ export default function App() {
 
   const handleChat = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!chatQuery.trim() || isChatting) return;
+    if (!chatQuery.trim() || isChatting || !activeSessionId) return;
 
     const query = chatQuery;
     setChatQuery("");
     
-    // Update session title if it's the first message
+    // Optimistic UI Update
     if (chatHistory.length === 0) {
       setChatSessions(prev => prev.map(s => 
         s.id === activeSessionId ? { ...s, title: query.length > 25 ? query.substring(0, 25) + '...' : query } : s
       ));
     }
-
-    const newMessage: Message = { role: 'user', content: query };
-    setChatSessions(prev => prev.map(s => 
-      s.id === activeSessionId ? { ...s, messages: [...s.messages, newMessage] } : s
-    ));
+    setChatHistory(prev => [...prev, { role: 'user', content: query }]);
 
     setIsChatting(true);
     setStreamingResponse("");
@@ -207,7 +236,7 @@ export default function App() {
       const response = await fetch(`${DEFAULT_API_BASE}/api/v1/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query }),
+        body: JSON.stringify({ query, session_id: activeSessionId }),
       });
 
       if (!response.body) throw new Error("No stream");
@@ -242,24 +271,13 @@ export default function App() {
         }
       }
       
-      const aiMessage: Message = { role: 'ai', content: accumulatedContent, citations: finalCitations };
-      setChatSessions(prev => prev.map(s => 
-        s.id === activeSessionId ? { ...s, messages: [...s.messages, aiMessage] } : s
-      ));
+      setChatHistory(prev => [...prev, { role: 'ai', content: accumulatedContent, citations: finalCitations }]);
       setStreamingResponse("");
     } catch (err: any) {
       setError(err.message);
     } finally {
       setIsChatting(false);
     }
-  };
-
-  // Clear Chats
-  const clearAllChats = () => {
-    const newSession = { id: Date.now().toString(), title: 'New Conversation', timestamp: Date.now(), messages: [] };
-    setChatSessions([newSession]);
-    setActiveSessionId(newSession.id);
-    setShowSettingsModal(false);
   };
 
   if (activeTab === 'hero') {
@@ -276,9 +294,9 @@ export default function App() {
           mrr: (metrics.avg_mrr || 0).toFixed(2) 
         } : null} 
         onUploadClick={() => setShowUploadModal(true)}
-        chatSessions={chatSessions}
+        chatSessions={chatSessions as any}
         activeSessionId={activeSessionId}
-        onSessionSelect={(id) => { setActiveSessionId(id); setActiveTab('playground'); }}
+        onSessionSelect={handleSessionSelect}
         onNewSession={handleNewSession}
         onOpenSettings={() => setShowSettingsModal(true)}
         onOpenSecurity={() => setShowSecurityModal(true)}
@@ -568,8 +586,8 @@ export default function App() {
                 </div>
                 <div className="retriq-card" style={{ padding: '16px' }}>
                   <p style={{ fontSize: '13px', fontWeight: '600', marginBottom: '4px' }}>Data Management</p>
-                  <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px' }}>Clear all local chat history threads.</p>
-                  <button onClick={clearAllChats} className="btn-secondary" style={{ width: '100%', padding: '8px', fontSize: '12px', color: 'var(--error)', borderColor: 'rgba(239, 68, 68, 0.2)' }}>Clear All Chats</button>
+                  <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px' }}>Clear all database chat history threads.</p>
+                  <button onClick={clearAllChats} className="btn-secondary" style={{ width: '100%', padding: '8px', fontSize: '12px', color: 'var(--error)', borderColor: 'rgba(239, 68, 68, 0.2)' }}>Clear All DB Chats</button>
                 </div>
               </div>
             </motion.div>
@@ -592,8 +610,8 @@ export default function App() {
                 <div className="retriq-card" style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '16px' }}>
                   <Server size={18} style={{ color: 'var(--text-muted)' }} />
                   <div>
-                    <p style={{ fontSize: '13px', fontWeight: '600' }}>Local Execution</p>
-                    <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Vault data remains on premise.</p>
+                    <p style={{ fontSize: '13px', fontWeight: '600' }}>Database Engine</p>
+                    <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>SQLite 3 / FAISS Local Vector</p>
                   </div>
                 </div>
                 <div className="retriq-card" style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '16px' }}>
