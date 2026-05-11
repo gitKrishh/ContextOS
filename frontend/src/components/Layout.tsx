@@ -186,7 +186,15 @@ export const Sidebar = ({
   );
 };
 
-export const Header = ({ title }: { title: string }) => {
+export const Header = ({ 
+  title, 
+  showInspector, 
+  onToggleInspector 
+}: { 
+  title: string; 
+  showInspector?: boolean; 
+  onToggleInspector?: () => void;
+}) => {
   const [theme, setTheme] = useState(() => localStorage.getItem('contextos-theme') || 'dark');
 
   useEffect(() => {
@@ -204,7 +212,28 @@ export const Header = ({ title }: { title: string }) => {
         <span className="text-mono" style={{ fontSize: '11px', color: 'var(--text-muted)' }}>v1.2.4</span>
       </div>
       
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        {onToggleInspector && (
+          <button 
+            onClick={onToggleInspector}
+            className={`btn-secondary ${showInspector ? 'active' : ''}`}
+            style={{ 
+              padding: '6px 12px',
+              borderRadius: '6px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontSize: '12px',
+              fontWeight: '500',
+              backgroundColor: showInspector ? 'var(--bg-panel)' : 'transparent',
+              borderColor: showInspector ? 'var(--primary)' : 'var(--border)'
+            }}
+          >
+            <Database size={14} />
+            {showInspector ? 'Hide Inspector' : 'Show Inspector'}
+          </button>
+        )}
+
         <button 
           onClick={toggleTheme} 
           className="btn-secondary"

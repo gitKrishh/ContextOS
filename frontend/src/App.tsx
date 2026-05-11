@@ -63,6 +63,7 @@ export default function App() {
   const [obsLogs, setObsLogs] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isNearBottom, setIsNearBottom] = useState(true);
+  const [showInspector, setShowInspector] = useState(true);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -83,13 +84,13 @@ export default function App() {
     const scrollToBottom = () => {
       chatEndRef.current?.scrollIntoView({ behavior: isChatting ? 'smooth' : 'auto', block: 'end' });
     };
-    
+
     // Immediate scroll
     scrollToBottom();
     // Delayed scroll to handle layout shifts/Framer Motion animations
     const timer = setTimeout(scrollToBottom, 50);
     const timer2 = setTimeout(scrollToBottom, 250);
-    
+
     return () => {
       clearTimeout(timer);
       clearTimeout(timer2);
@@ -199,7 +200,7 @@ export default function App() {
   const handleRenameSession = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!renamingSession || !newTitle.trim()) return;
-    
+
     try {
       const res = await fetch(`${DEFAULT_API_BASE}/api/v1/chat/sessions/${renamingSession.id}`, {
         method: 'PATCH',
@@ -380,24 +381,29 @@ export default function App() {
       />
 
       <div className="retriq-main">
-        <Header title={activeTab === 'playground' ? 'Query Console' : activeTab === 'documents' ? 'Data Vault' : 'System Analytics'} />
+        <Header 
+          title={activeTab === 'playground' ? 'Query Console' : activeTab === 'documents' ? 'Data Vault' : 'System Analytics'} 
+          showInspector={showInspector}
+          onToggleInspector={activeTab === 'playground' ? () => setShowInspector(!showInspector) : undefined}
+        />
 
         <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
           <AnimatePresence mode="wait">
 
             {activeTab === 'playground' && (
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: 5 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -5 }}
                 transition={{ duration: 0.15 }}
                 className="playground-grid"
+                style={{ gridTemplateColumns: showInspector ? '320px 1fr 320px' : '1fr 320px' }}
               >
-                <RetrievalInspector chunks={retrievedChunks} />
+                {showInspector && <RetrievalInspector chunks={retrievedChunks} />}
 
                 <div className="panel" style={{ backgroundColor: 'var(--bg-app)' }}>
-                  <div 
-                    className="panel-content" 
+                  <div
+                    className="panel-content"
                     onScroll={handleScroll}
                     style={{ display: 'flex', flexDirection: 'column', gap: '24px', padding: '32px' }}
                   >
@@ -428,16 +434,6 @@ export default function App() {
                             <div className="prose">
                               <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
                             </div>
-                            {msg.citations && msg.citations.length > 0 && (
-                              <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border)', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                                {msg.citations.map((c: any, j: number) => (
-                                  <div key={j} className="badge badge-primary" style={{ fontSize: '10px', display: 'flex', alignItems: 'center' }}>
-                                    <FileCode2 size={12} style={{ marginRight: '6px', color: 'var(--text-muted)' }} />
-                                    {c.metadata?.source?.source_name || 'Source'}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
                           </div>
                         </motion.div>
                       ))}
@@ -553,8 +549,8 @@ export default function App() {
                           <td style={{ padding: '16px 20px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <div style={{ width: '32px', height: '32px', borderRadius: '8px', backgroundColor: 'var(--text-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--bg-app)', fontWeight: 800, fontSize: '12px' }}>
-                            OS
-                          </div>
+                                OS
+                              </div>
                               <span className="text-mono" style={{ fontSize: '11px', fontWeight: '600', color: doc.job.status === 'completed' ? 'var(--text-primary)' : 'var(--warning)' }}>
                                 {doc.job.status.toUpperCase()}
                               </span>
@@ -612,14 +608,14 @@ export default function App() {
               </button>
 
               <div style={{ marginBottom: '24px' }}>
-                        <div style={{ width: '48px', height: '48px', backgroundColor: 'var(--bg-panel)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '24px' }}>
-                          <Terminal size={24} style={{ color: 'var(--text-muted)' }} />
-                        </div>
-                        <h2 className="text-display" style={{ fontSize: '24px', fontWeight: '700', marginBottom: '12px' }}>System Ready</h2>
-                        <p style={{ color: 'var(--text-secondary)', maxWidth: '400px' }}>
-                          Execute a query to retrieve grounded data from the vault.
-                        </p>
-                 <p style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>Upload files to append to your vector index.</p>
+                <div style={{ width: '48px', height: '48px', backgroundColor: 'var(--bg-panel)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '24px' }}>
+                  <Terminal size={24} style={{ color: 'var(--text-muted)' }} />
+                </div>
+                <h2 className="text-display" style={{ fontSize: '24px', fontWeight: '700', marginBottom: '12px' }}>System Ready</h2>
+                <p style={{ color: 'var(--text-secondary)', maxWidth: '400px' }}>
+                  Execute a query to retrieve grounded data from the vault.
+                </p>
+                <p style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>Upload files to append to your vector index.</p>
               </div>
 
               <form onSubmit={handleUpload}>
@@ -680,7 +676,7 @@ export default function App() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="glass-overlay">
             <motion.div initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }} className="glass-panel" style={{ width: '400px', padding: '32px', borderRadius: '16px', position: 'relative' }}>
               <button onClick={() => setShowRenameModal(false)} style={{ position: 'absolute', right: '20px', top: '20px', background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: '8px', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', cursor: 'pointer' }}><X size={14} /></button>
-              
+
               <div style={{ marginBottom: '24px' }}>
                 <h2 className="text-display" style={{ fontSize: '20px', fontWeight: '600', marginBottom: '8px' }}>Rename Conversation</h2>
                 <p style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>Give your chat session a more descriptive name.</p>
@@ -689,8 +685,8 @@ export default function App() {
               <form onSubmit={handleRenameSession}>
                 <div style={{ marginBottom: '24px' }}>
                   <label style={{ display: 'block', fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase' }}>Session Title</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     value={newTitle}
                     onChange={(e) => setNewTitle(e.target.value)}
                     autoFocus
