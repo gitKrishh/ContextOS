@@ -173,3 +173,12 @@ class SqliteDocumentStore:
                 updated_at=datetime.fromisoformat(row[4])
             ))
         return documents
+
+    def delete_document_sync(self, document_id: str) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM chunks WHERE document_id = ?", (document_id,))
+            conn.execute("DELETE FROM documents WHERE id = ?", (document_id,))
+            conn.commit()
+
+    async def delete_document(self, document_id: str) -> None:
+        await asyncio.to_thread(self.delete_document_sync, document_id)

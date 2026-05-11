@@ -143,6 +143,10 @@ async def delete_document(request: Request, document_id: str) -> DeleteResponse:
     deleted = _get_registry(request).delete_document(document_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Document not found")
+        
+    service = _get_service(request)
+    await service._store.delete_document(document_id)
+    
     return DeleteResponse(
         request_id=_get_request_id(request),
         deleted=True,
