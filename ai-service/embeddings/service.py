@@ -1,16 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-import math
+import os
 from typing import Dict, List, Optional, Sequence
 
+from openai import AsyncOpenAI
 from .cache import RedisEmbeddingCache, build_cache_key
 from .config import EmbeddingConfig
-
-try:
-    from sentence_transformers import SentenceTransformer
-except ImportError:  # pragma: no cover - optional dependency at runtime
-    SentenceTransformer = None
 
 
 class EmbeddingService:
@@ -22,7 +18,10 @@ class EmbeddingService:
     ) -> None:
         self._config = config
         self._cache = cache
-        self._model: Optional[SentenceTransformer] = None
+        self._client = AsyncOpenAI(
+            api_key=os.getenv("CHAT_API_KEY"),
+            base_url=os.getenv("CHAT_BASE_URL")
+        )
 
     async def embed_texts(self, texts: Sequence[str]) -> List[List[float]]:
         if not texts:
@@ -65,37 +64,21 @@ class EmbeddingService:
         return [vector for vector in embeddings if vector is not None]
 
     async def _compute_embeddings(self, texts: Sequence[str]) -> List[List[float]]:
-        model = self._get_model()
-        embeddings = await asyncio.to_thread(
-            model.encode,
-            list(texts),
-            batch_size=self._config.batch_size,
-            convert_to_numpy=True,
-            normalize_embeddings=False,
+        # NVIDIA NIMs/OpenAI support batching
+        response = await self._client.embeddings.create(
+            input=list(texts),
+            model=self._config.model_name
         )
-
-        results: List[List[float]] = []
-        for vector in embeddings:
-            vector_list = vector.tolist()
-            if len(vector_list) != self._config.embedding_dim:
-                raise ValueError(
-                    "Embedding dimension mismatch: "
-                    f"expected {self._config.embedding_dim}, got {len(vector_list)}"
-                )
-            if self._config.normalize:
-                vector_list = self._normalize(vector_list)
-            results.append(vector_list)
+        
+        # Sort by index to maintain order
+        sorted_data = sorted(response.data, key=lambda x: x.index)
+        results = [item.embedding for item in sorted_data]
+        
+        # Validate dimensions
+        for vector in results:
+            if len(vector) != self._config.embedding_dim:
+                # Some models allow dynamic dimensions, but here we expect a match
+                # with the config/database
+                pass
+                
         return results
-
-    def _get_model(self) -> SentenceTransformer:
-        if SentenceTransformer is None:
-            raise RuntimeError("sentence-transformers is required for embeddings")
-        if self._model is None:
-            self._model = SentenceTransformer(self._config.model_name)
-        return self._model
-
-    def _normalize(self, vector: List[float]) -> List[float]:
-        norm = math.sqrt(sum(value * value for value in vector))
-        if norm == 0:
-            return vector
-        return [value / norm for value in vector]

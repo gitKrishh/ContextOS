@@ -8,7 +8,6 @@ from embeddings import EmbeddingService
 from models.documents import Chunk
 from reranking import RerankerService
 from retrieval.bm25_index import BM25Index
-from retrieval.faiss_index import FaissIndex
 from storage.postgres_store import PostgresStore
 from utils.observability import telemetry
 
@@ -18,7 +17,6 @@ class HybridRetrievalService:
         self,
         *,
         embedding_service: EmbeddingService,
-        faiss_index: FaissIndex,
         bm25_index: BM25Index,
         store: PostgresStore,
         reranker: Optional[RerankerService] = None,
@@ -26,7 +24,6 @@ class HybridRetrievalService:
         rrf_k: int = 60,
     ) -> None:
         self._embedding_service = embedding_service
-        self._faiss_index = faiss_index
         self._bm25_index = bm25_index
         self._store = store
         self._reranker = reranker

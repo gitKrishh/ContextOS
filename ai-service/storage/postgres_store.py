@@ -49,7 +49,7 @@ class ChunkModel(Base):
     document_id = Column(String, index=True)
     content = Column(Text)
     metadata_json = Column(Text)
-    embedding = Column(Vector(384)) # Match embedding dimension
+    embedding = Column(Vector(1024)) # Match NVIDIA NIM dimension
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

@@ -9,7 +9,7 @@ from chunking import ChunkingService
 from embeddings import EmbeddingService
 from models.documents import Chunk, Document
 from models.ingestion import IngestionStatus
-from retrieval import BM25Index, FaissIndex
+from retrieval import BM25Index
 from services.ingestion_registry import IngestionRegistry
 from services.parsers import ParserError, ParserFactory
 from storage.postgres_store import PostgresStore
@@ -34,7 +34,6 @@ class IngestionService:
         chunking_service: ChunkingService,
         embedding_service: EmbeddingService,
         store: PostgresStore,
-        index: FaissIndex,
         bm25_index: BM25Index,
         max_retries: int = 2,
     ) -> None:
@@ -43,7 +42,6 @@ class IngestionService:
         self._chunking_service = chunking_service
         self._embedding_service = embedding_service
         self._store = store
-        self._index = index
         self._bm25_index = bm25_index
         self._max_retries = max_retries
         self._queue: asyncio.Queue[IngestionTask] = asyncio.Queue()
