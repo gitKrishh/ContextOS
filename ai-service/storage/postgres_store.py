@@ -59,10 +59,15 @@ from sqlalchemy import text
 
 class PostgresStore:
     def __init__(self, db_url: str):
-        self.engine = create_async_engine(db_url, echo=False)
-        self.async_session = sessionmaker(
-            self.engine, expire_on_commit=False, class_=AsyncSession
-        )
+        if db_url.startswith("postgresql://"):
+            db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        
+        connect_args = {}
+        if "supabase" in db_url or "railway" in db_url or "render" in db_url:
+            connect_args = {"ssl": "require"}
+            
+        self.engine = create_async_engine(db_url, echo=False, connect_args=connect_args)
+        self.async_session = sessionmaker(self.engine, expire_on_commit=False, class_=AsyncSession)
 
     async def initialize(self):
         async with self.engine.begin() as conn:
