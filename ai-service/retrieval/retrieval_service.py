@@ -10,6 +10,7 @@ from reranking import RerankerService
 from retrieval.bm25_index import BM25Index
 from retrieval.faiss_index import FaissIndex
 from storage.sqlite_store import SqliteDocumentStore
+from utils.observability import telemetry
 
 
 class HybridRetrievalService:
@@ -117,5 +118,12 @@ class HybridRetrievalService:
                 for chunk, score in results
             ]
             await self._cache.set(cache_key, cache_payload)
+
+        telemetry.log_request(
+            query=query,
+            req_type="search",
+            latency_ms=(time.perf_counter() - start_retrieval) * 1000,
+            metadata={"top_k": top_k, "use_reranker": use_reranker}
+        )
 
         return results

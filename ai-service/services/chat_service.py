@@ -1,7 +1,6 @@
-from __future__ import annotations
-
 import json
 import os
+import time
 from dataclasses import dataclass
 from typing import AsyncGenerator, List, Optional
 
@@ -9,7 +8,7 @@ from openai import AsyncOpenAI
 
 from models.documents import Chunk
 from utils.logging import logger as get_logger
-
+from utils.observability import telemetry
 
 @dataclass(frozen=True)
 class ChatConfig:
@@ -26,7 +25,6 @@ class ChatConfig:
         "Keep your answers concise and professional."
     )
 
-
 class ChatService:
     def __init__(self, config: Optional[ChatConfig] = None) -> None:
         self._config = config or ChatConfig()
@@ -35,6 +33,10 @@ class ChatService:
             base_url=self._config.base_url,
         )
         self._logger = get_logger("contextos.chat")
+
+    @property
+    def model_name(self) -> str:
+        return self._config.model
 
     def _format_context(self, chunks: List[Chunk]) -> str:
         context_parts = []
@@ -54,7 +56,6 @@ class ChatService:
         ]
 
         try:
-            print(f"DEBUG: Calling NVIDIA LLM {self._config.model}...")
             stream = await self._client.chat.completions.create(
                 model=self._config.model,
                 messages=messages,
@@ -68,7 +69,6 @@ class ChatService:
                     continue
                 content = chunk.choices[0].delta.content
                 if content:
-                    print(f"DEBUG: Token received: {content}")
                     yield content
         except Exception as e:
             self._logger.error(f"Error during chat completion: {e}")

@@ -72,7 +72,11 @@ class EvaluationService:
 
     def get_stats(self) -> Dict[str, Any]:
         if not self._history:
-            return {}
+            return {
+                "total_evals": 0,
+                "avg_hit_rate": 0.0,
+                "avg_mrr": 0.0,
+            }
             
         avg_hit_rate = sum(r.retrieval_hit_rate for r in self._history) / len(self._history)
         avg_mrr = sum(r.mrr for r in self._history) / len(self._history)

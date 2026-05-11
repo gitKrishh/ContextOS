@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from api import ingestion_router, retrieval_router, chat_router, evaluation_router
+from api import ingestion_router, retrieval_router, chat_router, evaluation_router, observability_router
 from cache.retrieval_cache import RedisRetrievalCache, RetrievalCacheConfig
 from chunking import ChunkingService
 from embeddings import CacheConfig, EmbeddingConfig, EmbeddingService, RedisEmbeddingCache
@@ -65,6 +65,7 @@ app.include_router(ingestion_router)
 app.include_router(retrieval_router)
 app.include_router(chat_router)
 app.include_router(evaluation_router)
+app.include_router(observability_router)
 
 
 def _build_services():
