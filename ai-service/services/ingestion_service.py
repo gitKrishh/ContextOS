@@ -163,6 +163,7 @@ class IngestionService:
                 [chunk.content for chunk in chunking_result.chunks]
             )
             embed_duration = time.perf_counter() - embed_start
+            print(f"DEBUG: Embedding took {embed_duration:.2f}s")
 
             # Map embeddings back to primary chunks
             for i, chunk in enumerate(chunking_result.chunks):
@@ -172,7 +173,6 @@ class IngestionService:
             await self._store.save_chunks(
                 [*chunking_result.chunks, *chunking_result.parent_chunks, *chunking_result.child_chunks]
             )
-
             await asyncio.to_thread(
                 self._bm25_index.add_documents,
                 [(chunk.id, chunk.content) for chunk in chunking_result.chunks],

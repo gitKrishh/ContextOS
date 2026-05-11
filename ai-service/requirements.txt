@@ -1,12 +1,9 @@
 fastapi
 uvicorn
 pydantic
-faiss-cpu
 numpy
 redis
-sentence-transformers
 python-multipart
-torch
 pydantic-settings
 pypdf
 python-docx
@@ -17,4 +14,5 @@ python-dotenv
 sqlalchemy
 asyncpg
 pgvector
-openai
+httpx
+greenlet

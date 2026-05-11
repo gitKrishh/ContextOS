@@ -32,7 +32,7 @@ class IngestionRegistry:
         raw_text: Optional[str] = None,
         max_attempts: int = 3,
     ) -> Tuple[Document, IngestionJob]:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         document_id = str(uuid4())
         extra: Dict[str, Any] = {"content_type": content_type, "size_bytes": size_bytes}
         if parsed_metadata:
@@ -106,7 +106,7 @@ class IngestionRegistry:
         if document is None:
             return
         document.metadata.extra["parsed"] = parsed_metadata
-        document.updated_at = datetime.now(timezone.utc)
+        document.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         self._raw_text[document_id] = raw_text
 
     def update_job_status(
@@ -120,14 +120,14 @@ class IngestionRegistry:
             return
         job.status = status
         job.error_message = error_message
-        job.updated_at = datetime.now(timezone.utc)
+        job.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
     def increment_attempts(self, document_id: str) -> int:
         job = self._jobs.get(document_id)
         if job is None:
             return 0
         job.attempts += 1
-        job.updated_at = datetime.now(timezone.utc)
+        job.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         return job.attempts
 
     def set_chunks(

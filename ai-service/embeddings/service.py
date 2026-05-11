@@ -23,14 +23,15 @@ class EmbeddingService:
             base_url=os.getenv("CHAT_BASE_URL")
         )
 
-    async def embed_texts(self, texts: Sequence[str]) -> List[List[float]]:
+    async def embed_texts(self, texts: Sequence[str], input_type: str = "passage") -> List[List[float]]:
         if not texts:
             return []
 
         cached: Dict[str, Optional[List[float]]] = {}
         keys: List[str] = []
         if self._cache is not None:
-            keys = [build_cache_key(self._config.model_name, text) for text in texts]
+            # We include input_type in the cache key to be safe
+            keys = [build_cache_key(f"{self._config.model_name}:{input_type}", text) for text in texts]
             cached = await self._cache.get_many(keys)
 
         embeddings: List[Optional[List[float]]] = [None] * len(texts)
@@ -47,7 +48,7 @@ class EmbeddingService:
                 missing_indices.append(index)
 
         if missing_texts:
-            computed = await self._compute_embeddings(missing_texts)
+            computed = await self._compute_embeddings_batched(missing_texts, input_type=input_type)
             for idx, vector in zip(missing_indices, computed):
                 embeddings[idx] = vector
 
@@ -63,22 +64,24 @@ class EmbeddingService:
             raise RuntimeError("Embedding generation failed for one or more inputs")
         return [vector for vector in embeddings if vector is not None]
 
-    async def _compute_embeddings(self, texts: Sequence[str]) -> List[List[float]]:
-        # NVIDIA NIMs/OpenAI support batching
+    async def _compute_embeddings_batched(self, texts: Sequence[str], input_type: str = "passage") -> List[List[float]]:
+        results: List[List[float]] = []
+        batch_size = self._config.batch_size or 32
+        
+        # Split texts into batches to avoid API timeouts and payload limits
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i : i + batch_size]
+            batch_results = await self._compute_embeddings(batch, input_type=input_type)
+            results.extend(batch_results)
+            
+        return results
+
+    async def _compute_embeddings(self, texts: Sequence[str], input_type: str = "passage") -> List[List[float]]:
         response = await self._client.embeddings.create(
             input=list(texts),
-            model=self._config.model_name
+            model=self._config.model_name,
+            extra_body={"input_type": input_type}
         )
         
-        # Sort by index to maintain order
         sorted_data = sorted(response.data, key=lambda x: x.index)
-        results = [item.embedding for item in sorted_data]
-        
-        # Validate dimensions
-        for vector in results:
-            if len(vector) != self._config.embedding_dim:
-                # Some models allow dynamic dimensions, but here we expect a match
-                # with the config/database
-                pass
-                
-        return results
+        return [item.embedding for item in sorted_data]

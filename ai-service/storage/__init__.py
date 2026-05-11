@@ -1,3 +1,3 @@
-from .sqlite_store import SqliteDocumentStore, SqliteStoreConfig
+from .postgres_store import PostgresStore
 
-__all__ = ["SqliteDocumentStore", "SqliteStoreConfig"]
+__all__ = ["PostgresStore"]

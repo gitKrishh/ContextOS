@@ -72,7 +72,7 @@ def _build_services(store: PostgresStore):
     data_dir = Path(os.getenv("CONTEXTOS_DATA_DIR", Path(__file__).resolve().parent / "data"))
     embedding_config = EmbeddingConfig(
         model_name=os.getenv("EMBEDDING_MODEL", "nvidia/nv-embedqa-e5-v5"),
-        embedding_dim=int(os.getenv("EMBEDDING_DIM", "1024")),
+        embedding_dim=int(os.getenv("EMBEDDING_DIM", "2048")),
         batch_size=int(os.getenv("EMBEDDING_BATCH_SIZE", "32")),
         cache_ttl_seconds=int(os.getenv("EMBEDDING_CACHE_TTL", "86400")),
         normalize=True,

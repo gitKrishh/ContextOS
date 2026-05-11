@@ -88,7 +88,7 @@ class ChunkingService:
         role: str,
         strategy: str,
     ) -> List[Chunk]:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         chunks: List[Chunk] = []
         for index, text in enumerate(texts):
             metadata = ChunkMetadata(
@@ -120,7 +120,7 @@ class ChunkingService:
         child_map: List[List[str]],
         strategy: str,
     ) -> List[Chunk]:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         chunks: List[Chunk] = []
         child_index = 0
 

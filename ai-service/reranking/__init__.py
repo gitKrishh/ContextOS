@@ -1,3 +1,4 @@
-from .reranker_service import RerankerConfig, RerankerService
+from .config import RerankerConfig
+from .reranker_service import RerankerService
 
 __all__ = ["RerankerConfig", "RerankerService"]

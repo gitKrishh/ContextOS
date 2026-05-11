@@ -55,7 +55,7 @@ class HybridRetrievalService:
                 ]
 
         # 1. Generate query embedding
-        query_embeddings = await self._embedding_service.embed_texts([query])
+        query_embeddings = await self._embedding_service.embed_texts([query], input_type="query")
         query_embedding = query_embeddings[0]
 
         # 2. Parallel Dense and Sparse retrieval
