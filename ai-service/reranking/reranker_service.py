@@ -7,8 +7,9 @@ from .config import RerankerConfig
 class RerankerService:
     def __init__(self, config: RerankerConfig):
         self.config = config
-        self.api_key = os.getenv("CHAT_API_KEY")
-        self.base_url = os.getenv("CHAT_BASE_URL").replace("/v1", "")
+        self.api_key = os.getenv("CHAT_API_KEY") or os.getenv("NVIDIA_API_KEY")
+        base_url_raw = os.getenv("CHAT_BASE_URL", "https://integrate.api.nvidia.com/v1")
+        self.base_url = base_url_raw.replace("/v1", "")
         self.endpoint = f"{self.base_url}/ranking"
         self._client = httpx.AsyncClient(
             headers={
