@@ -68,7 +68,12 @@ class PostgresStore:
             ctx = ssl.create_default_context()
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
-            connect_args = {"ssl": ctx}
+            # Disable prepared statements for pgbouncer compatibility
+            connect_args = {
+                "ssl": ctx,
+                "prepared_statement_cache_size": 0,
+                "statement_cache_size": 0
+            }
             
         self.engine = create_async_engine(db_url, echo=False, connect_args=connect_args)
         self.async_session = sessionmaker(self.engine, expire_on_commit=False, class_=AsyncSession)
