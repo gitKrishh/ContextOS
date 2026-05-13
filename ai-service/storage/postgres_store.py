@@ -7,14 +7,16 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
+from sqlalchemy.dialects.postgresql import UUID
 from pgvector.sqlalchemy import Vector
+import uuid
 
 Base = declarative_base()
 
 class ChatSession(Base):
     __tablename__ = 'chat_sessions'
     
-    id = Column(String, primary_key=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     title = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -23,8 +25,8 @@ class ChatSession(Base):
 class ChatMessage(Base):
     __tablename__ = 'chat_messages'
     
-    id = Column(String, primary_key=True)
-    session_id = Column(String, index=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    session_id = Column(UUID(as_uuid=True), index=True)
     role = Column(String)
     content = Column(Text)
     citations_json = Column(Text, nullable=True)
@@ -34,7 +36,7 @@ class ChatMessage(Base):
 class DocumentModel(Base):
     __tablename__ = 'documents'
     
-    id = Column(String, primary_key=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     title = Column(String)
     metadata_json = Column(Text)
     raw_text = Column(Text)
@@ -45,11 +47,11 @@ class DocumentModel(Base):
 class ChunkModel(Base):
     __tablename__ = 'chunks'
     
-    id = Column(String, primary_key=True)
-    document_id = Column(String, index=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id = Column(UUID(as_uuid=True), index=True)
     content = Column(Text)
     metadata_json = Column(Text)
-    embedding = Column(Vector(2048)) # Match Llama Nemotron dimension
+    embedding = Column(Vector(1024)) # Match NVIDIA NIM dimension
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
