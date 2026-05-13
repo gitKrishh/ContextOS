@@ -13,8 +13,8 @@ from utils.observability import telemetry
 @dataclass(frozen=True)
 class ChatConfig:
     model: str = os.getenv("CHAT_MODEL", "gpt-4o-mini")
-    api_key: Optional[str] = os.getenv("CHAT_API_KEY")
-    base_url: Optional[str] = os.getenv("CHAT_BASE_URL")
+    api_key: Optional[str] = os.getenv("CHAT_API_KEY") or os.getenv("NVIDIA_API_KEY")
+    base_url: Optional[str] = os.getenv("CHAT_BASE_URL", "https://integrate.api.nvidia.com/v1")
     temperature: float = 1.0
     max_tokens: int = 8192
     system_prompt: str = (
@@ -29,8 +29,8 @@ class ChatService:
     def __init__(self, config: Optional[ChatConfig] = None) -> None:
         self._config = config or ChatConfig()
         self._client = AsyncOpenAI(
-            api_key=self._config.api_key,
-            base_url=self._config.base_url,
+            api_key=os.getenv("CHAT_API_KEY") or os.getenv("NVIDIA_API_KEY"),
+            base_url=os.getenv("CHAT_BASE_URL", "https://integrate.api.nvidia.com/v1")
         )
         self._logger = get_logger("contextos.chat")
 

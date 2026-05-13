@@ -19,8 +19,8 @@ class EmbeddingService:
         self._config = config
         self._cache = cache
         self._client = AsyncOpenAI(
-            api_key=os.getenv("CHAT_API_KEY"),
-            base_url=os.getenv("CHAT_BASE_URL")
+            api_key=os.getenv("CHAT_API_KEY") or os.getenv("NVIDIA_API_KEY"),
+            base_url=os.getenv("CHAT_BASE_URL", "https://integrate.api.nvidia.com/v1")
         )
 
     async def embed_texts(self, texts: Sequence[str], input_type: str = "passage") -> List[List[float]]:

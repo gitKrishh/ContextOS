@@ -52,7 +52,21 @@ The system will be available at:
     - `CHAT_MODEL`: `meta/llama-4-maverick-17b-128e-instruct`
 4.  **Important**: Vercel Hobby plan has a **10s timeout**. If the LLM takes longer than 10s to start streaming, the request will fail. For long-form RAG, Railway is recommended for its persistent execution.
 
-#### Option B: Railway (Recommended for RAG)
+#### Option B: Render (Preferred for RAG)
+1.  **Create Service**: Go to [Render.com](https://render.com) and click **New -> Web Service**.
+2.  **Connect Repo**: Select the `ContextOS` repository.
+3.  **Settings**:
+    - **Root Directory**: `ai-service`
+    - **Runtime**: `Python 3`
+    - **Build Command**: `pip install -r requirements.txt`
+    - **Start Command**: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+4.  **Env Variables**:
+    - `DATABASE_URL`: Your Supabase connection string.
+    - `NVIDIA_API_KEY`: Your model API key.
+    - `CHAT_MODEL`: `meta/llama-4-maverick-17b-128e-instruct`
+5.  **Why Render?**: Unlike Vercel, Render is a persistent "Web Service," meaning it won't timeout during long AI generations.
+
+#### Option C: Railway
 1.  **Source**: Connect your GitHub repository.
 2.  **Root Directory**: `ai-service`.
 3.  **Env Variables**: (Same as above).
