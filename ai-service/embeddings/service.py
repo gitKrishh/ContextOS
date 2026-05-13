@@ -77,11 +77,15 @@ class EmbeddingService:
         return results
 
     async def _compute_embeddings(self, texts: Sequence[str], input_type: str = "passage") -> List[List[float]]:
-        response = await self._client.embeddings.create(
-            input=list(texts),
-            model=self._config.model_name,
-            extra_body={"input_type": input_type}
-        )
-        
-        sorted_data = sorted(response.data, key=lambda x: x.index)
-        return [item.embedding for item in sorted_data]
+        try:
+            response = await self._client.embeddings.create(
+                input=list(texts),
+                model=self._config.model_name,
+                extra_body={"input_type": input_type}
+            )
+            
+            sorted_data = sorted(response.data, key=lambda x: x.index)
+            return [item.embedding for item in sorted_data]
+        except Exception as e:
+            print(f"!!! NVIDIA EMBEDDING ERROR: {str(e)}")
+            raise e
