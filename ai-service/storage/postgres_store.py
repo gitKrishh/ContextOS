@@ -64,7 +64,11 @@ class PostgresStore:
         
         connect_args = {}
         if any(cloud in db_url for cloud in ["supabase", "railway", "render"]):
-            connect_args = {"ssl": True}
+            import ssl
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            connect_args = {"ssl": ctx}
             
         self.engine = create_async_engine(db_url, echo=False, connect_args=connect_args)
         self.async_session = sessionmaker(self.engine, expire_on_commit=False, class_=AsyncSession)
