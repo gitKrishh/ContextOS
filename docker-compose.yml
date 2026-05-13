@@ -28,11 +28,11 @@ services:
       context: ./ai-service
     ports:
       - "8000:8000"
+    env_file:
+      - ./ai-service/.env
     environment:
       - DATABASE_URL=postgresql://postgres:password@db:5432/contextos
       - REDIS_URL=redis://redis:6379/0
-      - CHAT_MODEL=meta/llama-4-maverick-17b-128e-instruct
-      - NVIDIA_API_KEY=${NVIDIA_API_KEY}
     depends_on:
       db:
         condition: service_healthy
