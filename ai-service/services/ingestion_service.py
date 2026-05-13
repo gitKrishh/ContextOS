@@ -190,6 +190,9 @@ class IngestionService:
         except ParserError as exc:
             await self._handle_failure(task, str(exc), retry=False)
         except Exception as exc:
+            import traceback
+            error_trace = traceback.format_exc()
+            self._logger.error(f"Ingestion Exception for {task.document_id}:\n{error_trace}")
             await self._handle_failure(task, str(exc))
 
     async def _handle_failure(
