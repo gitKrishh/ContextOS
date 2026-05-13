@@ -1,26 +1,52 @@
 services:
-  ai-service:
-    build:
-      context: .
-      dockerfile: infra/docker/ai-service.Dockerfile
+  # 1. Database (PostgreSQL with pgvector)
+  db:
+    image: ankane/pgvector:v0.5.1
     ports:
-      - "8000:8000"
-    volumes:
-      - ./ai-service/data:/app/data
-    depends_on:
-      - redis
+      - "5433:5432"
     environment:
-      - REDIS_URL=redis://redis:6379/0
+      POSTGRES_DB: contextos
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
+  # 2. Cache
   redis:
-    image: redis:7-alpine
+    image: redis:alpine
     ports:
       - "6379:6379"
 
+  # 3. AI Service Backend
+  ai-service:
+    build: 
+      context: ./ai-service
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@db:5432/contextos
+      - REDIS_URL=redis://redis:6379/0
+      - CHAT_MODEL=meta/llama-4-maverick-17b-128e-instruct
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  # 4. Frontend Console
   frontend:
-    build:
+    build: 
       context: ./frontend
     ports:
-      - "5173:5173"
+      - "80:80"
     depends_on:
       - ai-service
+
+volumes:
+  postgres_data:
