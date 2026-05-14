@@ -192,7 +192,7 @@ class IngestionService:
         except Exception as exc:
             import traceback
             error_trace = traceback.format_exc()
-            self._logger.error(f"Ingestion Exception for {task.document_id}:\n{error_trace}")
+            print(f"\n!!! INGESTION CRITICAL ERROR for {task.document_id}:\n{error_trace}\n")
             await self._handle_failure(task, str(exc))
 
     async def _handle_failure(
