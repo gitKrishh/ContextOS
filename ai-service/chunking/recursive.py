@@ -35,4 +35,8 @@ class RecursiveChunker:
             ):
                 return chunks
 
-        return [text]
+        # Final fallback: Force split if no separators work
+        # Using a conservative 3 chars per token
+        chars_per_token = 3
+        max_chars = self._config.target_max_tokens * chars_per_token
+        return [text[i : i + max_chars] for i in range(0, len(text), max_chars)]
