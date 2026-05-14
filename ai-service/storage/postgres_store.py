@@ -116,7 +116,7 @@ class PostgresStore:
         async with self.async_session() as session:
             result = await session.execute(select(ChatSession).order_by(ChatSession.created_at.desc()))
             sessions = result.scalars().all()
-            return [{"id": s.id, "title": s.title, "created_at": s.created_at.isoformat()} for s in sessions]
+            return [{"id": str(s.id), "title": s.title, "created_at": s.created_at.isoformat()} for s in sessions]
 
     async def get_messages(self, session_id: str) -> List[dict]:
         async with self.async_session() as session:
@@ -125,7 +125,7 @@ class PostgresStore:
             )
             messages = result.scalars().all()
             return [{
-                "id": m.id,
+                "id": str(m.id),
                 "role": m.role,
                 "content": m.content,
                 "citations": json.loads(m.citations_json) if m.citations_json else []
@@ -227,8 +227,8 @@ class PostgresStore:
             chunks = []
             for c in db_chunks:
                 chunks.append(Chunk(
-                    id=c.id,
-                    document_id=c.document_id,
+                    id=str(c.id),
+                    document_id=str(c.document_id),
                     content=c.content,
                     metadata=ChunkMetadata.model_validate_json(c.metadata_json),
                     created_at=c.created_at
@@ -246,7 +246,7 @@ class PostgresStore:
             documents = []
             for d in db_docs:
                 documents.append(Document(
-                    id=d.id,
+                    id=str(d.id),
                     title=d.title,
                     metadata=DocumentMetadata.model_validate_json(d.metadata_json),
                     created_at=d.created_at,
@@ -262,7 +262,7 @@ class PostgresStore:
             documents = []
             for d in db_docs:
                 documents.append(Document(
-                    id=d.id,
+                    id=str(d.id),
                     title=d.title,
                     metadata=DocumentMetadata.model_validate_json(d.metadata_json),
                     created_at=d.created_at,

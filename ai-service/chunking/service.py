@@ -76,7 +76,8 @@ class ChunkingService:
         if len(chunks) > self._config.max_chunk_count:
             return False
         for chunk in chunks:
-            if estimate_tokens(chunk) > self._config.target_max_tokens * 1.5:
+            # We are now very strict to stay under 512
+            if estimate_tokens(chunk) > self._config.target_max_tokens:
                 return False
         return True
 
