@@ -54,6 +54,7 @@ class BM25Index:
 
     def add_documents(self, documents: Sequence[Tuple[str, str]], save: bool = True) -> None:
         for doc_id, text in documents:
+            doc_id = str(doc_id)
             if doc_id in self._doc_term_freqs:
                 self._remove_document(doc_id)
             tokens = _tokenize(text)
@@ -100,8 +101,8 @@ class BM25Index:
 
     def save(self) -> None:
         payload = {
-            "doc_term_freqs": self._doc_term_freqs,
-            "doc_lengths": self._doc_lengths,
+            "doc_term_freqs": {str(k): v for k, v in self._doc_term_freqs.items()},
+            "doc_lengths": {str(k): v for k, v in self._doc_lengths.items()},
             "doc_freq": self._doc_freq,
             "doc_count": self._doc_count,
             "total_doc_len": self._total_doc_len,

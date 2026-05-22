@@ -213,7 +213,7 @@ class PostgresStore:
                     extra = metadata.get("extra", {})
                     if extra.get("role") != role:
                         continue
-                results.append((chunk.id, chunk.content))
+                results.append((str(chunk.id), chunk.content))
             return results
 
     async def load_chunks(self, chunk_ids: List[str]) -> List[Chunk]:
